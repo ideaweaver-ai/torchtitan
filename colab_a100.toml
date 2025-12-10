@@ -1,0 +1,82 @@
+# Colab A100 Optimized Configuration
+# This config is optimized for Google Colab's single A100 GPU (40GB)
+
+[job]
+dump_folder = "./outputs"
+description = "Llama 4 training on Colab A100 - Debug Model"
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 100
+
+[metrics]
+log_freq = 10
+enable_tensorboard = true
+save_tb_folder = "tb"
+enable_wandb = false
+
+[model]
+name = "llama4"
+flavor = "debugmodel"  # Smallest model: 256 dim, 6 layers (~2-4GB memory)
+# Note: Tokenizer is shared across all Llama 4 models, so any Llama 4 tokenizer works
+hf_assets_path = "./assets/hf/Llama-4-Scout-17B-16E"
+# converters = ["float8"]  # Uncomment for Float8 training (experimental)
+
+[optimizer]
+name = "AdamW"
+lr = 4e-3
+eps = 1e-15
+weight_decay = 0.1
+
+[lr_scheduler]
+warmup_steps = 100
+min_lr_factor = 0.1
+# Note: stable_steps is not a valid field - removed
+
+[training]
+local_batch_size = 2  # Small batch for single GPU
+seq_len = 2048  # Reduced sequence length to fit in memory
+max_norm = 1.0  # Gradient clipping
+steps = 10000  # 10,000 steps for production training
+dataset = "c4"
+mixed_precision_param = "bfloat16"
+mixed_precision_reduce = "bfloat16"
+enable_cpu_offload = false  # Set to true if OOM
+
+[parallelism]
+data_parallel_replicate_degree = 1
+data_parallel_shard_degree = -1
+tensor_parallel_degree = 1  # Single GPU - no tensor parallelism
+enable_async_tensor_parallel = false
+pipeline_parallel_degree = 1
+context_parallel_degree = 1
+expert_parallel_degree = 1
+expert_tensor_parallel_degree = 1
+
+[checkpoint]
+enable = true
+folder = "checkpoint"
+interval = 500  # Save every 500 steps
+last_save_model_only = true
+last_save_in_hf = true  # Save final checkpoint in Hugging Face format
+export_dtype = "bfloat16"  # Use bfloat16 for smaller file size
+async_mode = "disabled"
+exclude_from_loading = ["data_loader"]  # Exclude dataloader when resuming from model-only checkpoints
+initial_load_model_only = true  # Load only model weights from existing checkpoints
+
+[activation_checkpoint]
+mode = "full"  # Enable full activation checkpointing to save memory
+
+[compile]
+enable = false  # Disable compile for Colab compatibility
+components = ["model", "loss"]
+backend = "inductor"
+
+[quantize.linear.float8]
+enable_fsdp_float8_all_gather = false
+precompute_float8_dynamic_scale_for_fsdp = false
+filter_fqns = ["output", "router.gate"]
+
+[quantize.linear.mx]
+filter_fqns = ["output", "router.gate"]
